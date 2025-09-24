@@ -60,7 +60,6 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/registry/core/chain"
 	"github.com/networkservicemesh/sdk/pkg/tools/grpcutils"
 	authmonitor "github.com/networkservicemesh/sdk/pkg/tools/monitorconnection/authorize"
-	"github.com/networkservicemesh/sdk/pkg/tools/token"
 )
 
 // Nsmgr - A simple combination of the Endpoint, registry.NetworkServiceRegistryServer, and registry.NetworkServiceDiscoveryServer interfaces
@@ -181,7 +180,7 @@ var _ Nsmgr = (*nsmgrServer)(nil)
 //
 //	          tokenGenerator - authorization token generator
 //				 options - a set of Nsmgr options.
-func NewServer(ctx context.Context, tokenGenerator token.GeneratorFunc, options ...Option) Nsmgr {
+func NewServer(ctx context.Context, options ...Option) Nsmgr {
 	opts := &serverOptions{
 		authorizeServer:                  authorize.NewServer(authorize.Any()),
 		authorizeMonitorConnectionServer: authmonitor.NewMonitorConnectionServer(authmonitor.Any()),
@@ -249,7 +248,7 @@ func NewServer(ctx context.Context, tokenGenerator token.GeneratorFunc, options 
 	)
 
 	// Construct Endpoint
-	rv.Endpoint = endpoint.NewServer(ctx, tokenGenerator,
+	rv.Endpoint = endpoint.NewServer(ctx,
 		endpoint.WithName(opts.name),
 		endpoint.WithAuthorizeServer(opts.authorizeServer),
 		endpoint.WithAuthorizeMonitorConnectionServer(opts.authorizeMonitorConnectionServer),
