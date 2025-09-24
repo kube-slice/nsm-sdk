@@ -38,12 +38,10 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/monitor"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/timeout"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/updatepath"
-	"github.com/networkservicemesh/sdk/pkg/networkservice/common/updatetoken"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/core/chain"
 	"github.com/networkservicemesh/sdk/pkg/tools/grpcutils"
 	authmonitor "github.com/networkservicemesh/sdk/pkg/tools/monitorconnection/authorize"
 	"github.com/networkservicemesh/sdk/pkg/tools/monitorconnection/next"
-	"github.com/networkservicemesh/sdk/pkg/tools/token"
 )
 
 // Endpoint - aggregates the APIs:
@@ -106,7 +104,7 @@ func WithAdditionalFunctionality(additionalFunctionality ...networkservice.Netwo
 }
 
 // NewServer - returns a NetworkServiceMesh client as a chain of the standard Client pieces plus whatever
-func NewServer(ctx context.Context, tokenGenerator token.GeneratorFunc, options ...Option) Endpoint {
+func NewServer(ctx context.Context, options ...Option) Endpoint {
 	opts := &serverOptions{
 		name:                             "endpoint-" + uuid.New().String(),
 		authorizeServer:                  authorize.NewServer(authorize.Any()),
@@ -122,7 +120,6 @@ func NewServer(ctx context.Context, tokenGenerator token.GeneratorFunc, options 
 		append([]networkservice.NetworkServiceServer{
 			updatepath.NewServer(opts.name),
 			begin.NewServer(),
-			updatetoken.NewServer(tokenGenerator),
 			opts.authorizeServer,
 			metadata.NewServer(),
 			timeout.NewServer(ctx),
