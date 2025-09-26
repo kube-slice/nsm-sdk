@@ -2,55 +2,50 @@ package mechanismdefaults
 
 import (
 	"context"
-	"strconv"
+	"fmt"
+	"os"
+	"syscall"
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/core/next"
 )
 
-// NewServer returns a NetworkServiceServer chain element
-// that populates missing integer mechanism parameters for KERNEL mechanisms.
+type mechanismDefaultsServer struct{}
+
 func NewServer() networkservice.NetworkServiceServer {
-	return &kernelDefaultServer{}
+	return &mechanismDefaultsServer{}
 }
 
-type kernelDefaultServer struct{}
+func (m *mechanismDefaultsServer) Request(ctx context.Context, connRequest *networkservice.NetworkServiceRequest) (*networkservice.Connection, error) {
+	conn := connRequest.GetConnection()
+	if conn.Mechanism == nil {
+		conn.Mechanism = &networkservice.Mechanism{
+			Parameters: make(map[string]string),
+		}
+	}
 
-// Request populates integer parameters before forwarding
-func (k *kernelDefaultServer) Request(ctx context.Context, request *networkservice.NetworkServiceRequest) (*networkservice.Connection, error) {
-	for _, mech := range request.MechanismPreferences {
-		populateKernelDefaults(mech)
+	mech := conn.Mechanism
+	if mech.Cls == "" {
+		mech.Cls = "LOCAL"
 	}
-	if request.GetConnection() != nil {
-		populateKernelDefaults(request.GetConnection().GetMechanism())
+	if mech.Type == "" {
+		mech.Type = "KERNEL"
 	}
-	return next.Server(ctx).Request(ctx, request)
+	if _, ok := mech.Parameters["inodeURL"]; !ok {
+		stat, err := os.Stat("/proc/thread-self/ns/net")
+		if err == nil {
+			inode := int(stat.Sys().(*syscall.Stat_t).Ino)
+			mech.Parameters["inodeURL"] = fmt.Sprintf("inode://4/%d", inode)
+		}
+	}
+	if _, ok := mech.Parameters["name"]; !ok {
+		mech.Parameters["name"] = "nsm0"
+	}
+
+	return next.Server(ctx).Request(ctx, connRequest)
 }
 
-// Close ensures integers exist before closing
-func (k *kernelDefaultServer) Close(ctx context.Context, conn *networkservice.Connection) (*empty.Empty, error) {
-	populateKernelDefaults(conn.GetMechanism())
+func (m *mechanismDefaultsServer) Close(ctx context.Context, conn *networkservice.Connection) (*empty.Empty, error) {
 	return next.Server(ctx).Close(ctx, conn)
-}
-
-// populateKernelDefaults sets default integer parameters for KERNEL mechanisms
-func populateKernelDefaults(mech *networkservice.Mechanism) {
-	if mech == nil || mech.GetCls() != "LOCAL" || mech.GetType() != "KERNEL" {
-		return
-	}
-
-	if mech.Parameters == nil {
-		mech.Parameters = make(map[string]string)
-	}
-
-	// ifindex required by kernel forwarder
-	if _, ok := mech.Parameters["ifindex"]; !ok {
-		mech.Parameters["ifindex"] = strconv.Itoa(1)
-	}
-
-	// inode optional, set default if missing
-	if _, ok := mech.Parameters["inode"]; !ok {
-		mech.Parameters["inode"] = strconv.Itoa(1)
-	}
 }

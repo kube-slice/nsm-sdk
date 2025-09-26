@@ -41,14 +41,25 @@ import (
 type NSURL url.URL
 
 // Mechanism - return Mechanism for the requested Network Service
-func (n *NSURL) Mechanism() *networkservice.Mechanism {
-	mechanism := &networkservice.Mechanism{Cls: cls.LOCAL, Type: strings.ToUpper(n.Scheme)}
-	segments := strings.Split(n.Path, "/")
+func getPodInode() string {
+	// Use the PID of the NSC container
+	return "file:///proc/self/ns/net"
+}
 
+func (n *NSURL) Mechanism() *networkservice.Mechanism {
+	mechanism := &networkservice.Mechanism{
+		Cls:  cls.LOCAL,
+		Type: strings.ToUpper(n.Scheme),
+		Parameters: map[string]string{
+			common.InodeURL: getPodInode(),
+		},
+	}
+
+	segments := strings.Split(n.Path, "/")
 	if len(segments) > 1 {
-		mechanism.Parameters = make(map[string]string)
 		mechanism.Parameters[common.InterfaceNameKey] = segments[len(segments)-1]
 	}
+
 	return mechanism
 }
 

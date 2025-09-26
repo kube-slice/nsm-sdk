@@ -19,7 +19,10 @@ package discoverforwarder
 
 import (
 	"context"
+	"fmt"
 	"net/url"
+	"os"
+	"syscall"
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
@@ -119,7 +122,20 @@ func (d *discoverForwarderServer) Request(ctx context.Context, request *networks
 				logger.Errorf("can not parse forwarder=%v url=%v error=%v", candidate.Name, candidate.Url, err.Error())
 				continue
 			}
+			fmt.Println("**********************************************************************************************************************************************************************************")
+			mech := request.GetConnection().GetMechanism()
+			if mech != nil {
+				mech.Cls = "LOCAL"
+				mech.Type = "KERNEL"
 
+				stat, err := os.Stat("/proc/thread-self/ns/net")
+				if err == nil {
+					inode := int(stat.Sys().(*syscall.Stat_t).Ino)
+					mech.Parameters["inodeURL"] = fmt.Sprintf("inode://4/%d", inode)
+				}
+				mech.Parameters["name"] = "nsm0"
+			}
+			logger.Infof("Mechanism: %+v", mech)
 			resp, err := next.Server(ctx).Request(clienturlctx.WithClientURL(ctx, u), request.Clone())
 
 			if err == nil {

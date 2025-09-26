@@ -21,7 +21,6 @@ package endpoint
 
 import (
 	"context"
-	"github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanismdefaults"
 	"net/url"
 
 	"google.golang.org/grpc"
@@ -121,7 +120,6 @@ func NewServer(ctx context.Context, options ...Option) Endpoint {
 		append([]networkservice.NetworkServiceServer{
 			updatepath.NewServer(opts.name),
 			begin.NewServer(),
-			mechanismdefaults.NewServer(),
 			opts.authorizeServer,
 			metadata.NewServer(),
 			timeout.NewServer(ctx),
