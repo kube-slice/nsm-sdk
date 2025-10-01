@@ -34,7 +34,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
 
-	"github.com/networkservicemesh/sdk/pkg/networkservice/common/authorize"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/monitor"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/timeout"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/updatepath"
@@ -107,7 +106,6 @@ func WithAdditionalFunctionality(additionalFunctionality ...networkservice.Netwo
 func NewServer(ctx context.Context, options ...Option) Endpoint {
 	opts := &serverOptions{
 		name:                             "endpoint-" + uuid.New().String(),
-		authorizeServer:                  authorize.NewServer(authorize.Any()),
 		authorizeMonitorConnectionServer: authmonitor.NewMonitorConnectionServer(authmonitor.Any()),
 	}
 	for _, opt := range options {
@@ -120,7 +118,6 @@ func NewServer(ctx context.Context, options ...Option) Endpoint {
 		append([]networkservice.NetworkServiceServer{
 			updatepath.NewServer(opts.name),
 			begin.NewServer(),
-			opts.authorizeServer,
 			metadata.NewServer(),
 			timeout.NewServer(ctx),
 			monitor.NewServer(ctx, &mcsPtr),
