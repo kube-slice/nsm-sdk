@@ -21,9 +21,11 @@ package endpoint
 
 import (
 	"context"
+	"github.com/networkservicemesh/sdk/pkg/networkservice/common/ensureexpires"
 	authmonitor "github.com/networkservicemesh/sdk/pkg/tools/monitorconnection/authorize"
 	"github.com/networkservicemesh/sdk/pkg/tools/monitorconnection/next"
 	"net/url"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -118,6 +120,7 @@ func NewServer(ctx context.Context, options ...Option) Endpoint {
 		append([]networkservice.NetworkServiceServer{
 			updatepath.NewServer(opts.name),
 			begin.NewServer(),
+			ensureexpires.NewServer(10 * time.Minute),
 			metadata.NewServer(),
 			timeout.NewServer(ctx),
 			monitor.NewServer(ctx, &mcsPtr),
