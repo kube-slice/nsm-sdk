@@ -22,6 +22,7 @@ package endpoint
 import (
 	"context"
 	"net/url"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
 
+	"github.com/networkservicemesh/sdk/pkg/networkservice/common/ensureexpires"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/monitor"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/timeout"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/updatepath"
@@ -118,6 +120,7 @@ func NewServer(ctx context.Context, options ...Option) Endpoint {
 		append([]networkservice.NetworkServiceServer{
 			updatepath.NewServer(opts.name),
 			begin.NewServer(),
+			ensureexpires.NewServer(10 * time.Minute),
 			metadata.NewServer(),
 			timeout.NewServer(ctx),
 			monitor.NewServer(ctx, &mcsPtr),
