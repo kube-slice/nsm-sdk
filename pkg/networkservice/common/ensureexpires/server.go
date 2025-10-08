@@ -37,7 +37,11 @@ func (u *updateExpiresServer) setExpires(conn *networkservice.Connection) {
 	if prev := conn.GetPrevPathSegment(); prev != nil {
 		prev.Expires = timestamppb.New(now.Add(u.ttl))
 	}
-
+	path := conn.GetPath()
+	if path == nil {
+		path = &networkservice.Path{}
+	}
+	path.GetPathSegments()[path.GetIndex()].Expires = timestamppb.New(now.Add(u.ttl))
 	// Current path segment
 	//if len(conn.Path.PathSegments) > 0 && int(conn.Path.GetIndex()) < len(conn.Path.PathSegments) {
 	//	curr := conn.Path.PathSegments[conn.Path.GetIndex()]
