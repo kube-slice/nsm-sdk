@@ -27,7 +27,7 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/registry/common/clientconn"
 )
 
-var errNoCCProvided = errors.New("no grpc.ClientConnInterface provided")
+var errNoCCProvided = errors.New("no1 grpc.ClientConnInterface provided")
 
 type connectNSEClient struct{}
 
