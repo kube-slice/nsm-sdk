@@ -34,10 +34,10 @@ import (
 )
 
 // SupplyNSMgrProxyFunc nsmgr proxy
-type SupplyNSMgrProxyFunc func(ctx context.Context, regURL, proxyURL *url.URL, tokenGenerator token.GeneratorFunc, options ...nsmgrproxy.Option) nsmgr.Nsmgr
+type SupplyNSMgrProxyFunc func(ctx context.Context, regURL, proxyURL *url.URL, options ...nsmgrproxy.Option) nsmgr.Nsmgr
 
 // SupplyNSMgrFunc supplies NSMGR
-type SupplyNSMgrFunc func(ctx context.Context, tokenGenerator token.GeneratorFunc, options ...nsmgr.Option) nsmgr.Nsmgr
+type SupplyNSMgrFunc func(ctx context.Context, options ...nsmgr.Option) nsmgr.Nsmgr
 
 // SupplyRegistryFunc supplies Registry
 type SupplyRegistryFunc func(ctx context.Context, expiryDuration time.Duration, proxyRegistryURL *url.URL, options ...grpc.DialOption) registry.Registry
