@@ -249,7 +249,7 @@ func NewServer(ctx context.Context, tokenGenerator token.GeneratorFunc, options 
 	)
 
 	// Construct Endpoint
-	rv.Endpoint = endpoint.NewServer(ctx, tokenGenerator,
+	rv.Endpoint = endpoint.NewServer(ctx,
 		endpoint.WithName(opts.name),
 		endpoint.WithAuthorizeServer(opts.authorizeServer),
 		endpoint.WithAuthorizeMonitorConnectionServer(opts.authorizeMonitorConnectionServer),

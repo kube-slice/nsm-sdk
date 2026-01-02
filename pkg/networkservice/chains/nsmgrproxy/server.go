@@ -219,7 +219,7 @@ func NewServer(ctx context.Context, regURL, proxyURL *url.URL, tokenGenerator to
 		registryconnect.NewNetworkServiceRegistryClient(),
 	)
 
-	rv.Endpoint = endpoint.NewServer(ctx, tokenGenerator,
+	rv.Endpoint = endpoint.NewServer(ctx,
 		endpoint.WithName(opts.name),
 		endpoint.WithAuthorizeServer(opts.authorizeServer),
 		endpoint.WithAuthorizeMonitorConnectionServer(opts.authorizeMonitorConnectionServer),

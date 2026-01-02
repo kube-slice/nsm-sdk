@@ -134,7 +134,7 @@ func (n *Node) NewForwarder(
 		registryclient.WithClientURL(CloneURL(n.NSMgr.URL)),
 		registryclient.WithDialOptions(dialOptions...))
 	entry.restartableServer = newRestartableServer(ctx, n.t, entry.URL, func(ctx context.Context) {
-		entry.Endpoint = endpoint.NewServer(ctx, generatorFunc,
+		entry.Endpoint = endpoint.NewServer(ctx,
 			endpoint.WithName(entry.Name),
 			endpoint.WithAdditionalFunctionality(
 				append(
@@ -200,7 +200,7 @@ func (n *Node) NewEndpoint(
 		URL:  serveURL,
 	}
 	entry.restartableServer = newRestartableServer(ctx, n.t, entry.URL, func(ctx context.Context) {
-		entry.Endpoint = endpoint.NewServer(ctx, generatorFunc,
+		entry.Endpoint = endpoint.NewServer(ctx,
 			endpoint.WithName(entry.Name),
 			endpoint.WithAdditionalFunctionality(additionalFunctionality...),
 		)

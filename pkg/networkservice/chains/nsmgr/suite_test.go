@@ -171,7 +171,7 @@ func (s *nsmgrSuite) Test_SelectsRestartingEndpointUsecase() {
 	// 2. Postpone endpoint start
 	time.AfterFunc(time.Second, func() {
 		serv := grpc.NewServer()
-		endpoint.NewServer(ctx, sandbox.GenerateTestToken).Register(serv)
+		endpoint.NewServer(ctx).Register(serv)
 		_ = serv.Serve(netListener)
 	})
 

@@ -19,11 +19,9 @@ package monitor_test
 import (
 	"context"
 	"fmt"
+	"google.golang.org/protobuf/proto"
 	"net/url"
 	"testing"
-	"time"
-
-	"google.golang.org/protobuf/proto"
 
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
 	"github.com/stretchr/testify/suite"
@@ -117,7 +115,6 @@ func (m *MonitorPassThroughSuite) StartPassThroughEndpoints(connectTo *url.URL) 
 		passThroughConnectToURL := &url.URL{}
 		passThroughEndpoint := endpoint.NewServer(
 			passThroughCtx,
-			sandbox.GenerateExpiringToken(time.Second),
 			endpoint.WithName(name),
 			endpoint.WithAuthorizeServer(null.NewServer()),
 			endpoint.WithAdditionalFunctionality(
@@ -156,7 +153,6 @@ func (m *MonitorPassThroughSuite) StartEndPoint() {
 	name := "endpoint"
 	m.endpoint = endpoint.NewServer(
 		m.testCtx,
-		sandbox.GenerateExpiringToken(time.Second),
 		endpoint.WithName(name),
 		endpoint.WithAuthorizeServer(null.NewServer()),
 	)
