@@ -52,7 +52,6 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/tools/grpcutils"
 	"github.com/networkservicemesh/sdk/pkg/tools/log"
 	authmonitor "github.com/networkservicemesh/sdk/pkg/tools/monitorconnection/authorize"
-	"github.com/networkservicemesh/sdk/pkg/tools/token"
 )
 
 func (n *nsmgrProxyServer) Register(s *grpc.Server) {
@@ -181,7 +180,7 @@ func WithDialTimeout(dialTimeout time.Duration) Option {
 }
 
 // NewServer creates new proxy NSMgr
-func NewServer(ctx context.Context, regURL, proxyURL *url.URL, tokenGenerator token.GeneratorFunc, options ...Option) nsmgr.Nsmgr {
+func NewServer(ctx context.Context, regURL, proxyURL *url.URL, options ...Option) nsmgr.Nsmgr {
 	rv := new(nsmgrProxyServer)
 	opts := &serverOptions{
 		name:                             "nsmgr-proxy-" + uuid.New().String(),
@@ -219,7 +218,7 @@ func NewServer(ctx context.Context, regURL, proxyURL *url.URL, tokenGenerator to
 		registryconnect.NewNetworkServiceRegistryClient(),
 	)
 
-	rv.Endpoint = endpoint.NewServer(ctx, tokenGenerator,
+	rv.Endpoint = endpoint.NewServer(ctx,
 		endpoint.WithName(opts.name),
 		endpoint.WithAuthorizeServer(opts.authorizeServer),
 		endpoint.WithAuthorizeMonitorConnectionServer(opts.authorizeMonitorConnectionServer),

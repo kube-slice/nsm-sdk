@@ -298,7 +298,6 @@ func (b *Builder) newNSMgrProxy() *NSMgrEntry {
 		entry.Nsmgr = b.supplyNSMgrProxy(ctx,
 			CloneURL(b.domain.Registry.URL),
 			CloneURL(b.domain.RegistryProxy.URL),
-			b.generateTokenFunc,
 			nsmgrproxy.WithListenOn(entry.URL),
 			nsmgrproxy.WithName(entry.Name),
 			nsmgrproxy.WithDialOptions(dialOptions...),
