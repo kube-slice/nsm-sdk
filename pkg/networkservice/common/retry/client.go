@@ -78,21 +78,22 @@ func (r *retryClient) Request(ctx context.Context, request *networkservice.Netwo
 	for ctx.Err() == nil {
 		requestCtx, cancel := c.WithTimeout(ctx, r.tryTimeout)
 		resp, err := r.client.Request(requestCtx, request.Clone(), opts...)
-		r.maxRetry--
-		if r.maxRetry == 0 {
-			logger.Infof("Retry request limit exceeded")
-			r.cancel()
-			return resp, err
-		}
 		cancel()
 
 		if err != nil {
+			r.maxRetry--
+			if r.maxRetry <= 0 {
+				logger.Infof("Retry request limit exceeded")
+				r.cancel()
+				return nil, err
+			}
 			logger.Errorf("try attempt has failed: %v", err.Error())
 
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case <-c.After(r.interval):
+				logger.Infof("*****try again****")
 				continue
 			}
 		}
