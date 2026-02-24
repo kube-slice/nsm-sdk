@@ -93,7 +93,6 @@ func (r *retryClient) Request(ctx context.Context, request *networkservice.Netwo
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case <-c.After(r.interval):
-				logger.Infof("*****try again****")
 				continue
 			}
 		}
