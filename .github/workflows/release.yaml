@@ -13,7 +13,7 @@ jobs:
     name: Print debug info for Release workflow
     runs-on: ubuntu-latest
     steps:
-      - uses: hmarr/debug-action@v2
+      - uses: hmarr/debug-action@a701ed95a46e6f2fb0df25e1a558c16356fae35a # v2
 
   get-tag:
     name: Get tag
@@ -31,14 +31,14 @@ jobs:
   create-release:
     name: Create release
     needs: get-tag
-    uses: networkservicemesh/.github/.github/workflows/release.yaml@main
+    uses: networkservicemesh/.github/.github/workflows/release.yaml@fe8cd964c2e13a408077d9a78b939934e3b4521f # main
     secrets:
       token: ${{ secrets.NSM_BOT_GITHUB_TOKEN }}
 
   release-dependent-repositories:
     name: Release dependent repositories
     needs: [get-tag, create-release]
-    uses: networkservicemesh/.github/.github/workflows/release-dependent-repositories.yaml@main
+    uses: networkservicemesh/.github/.github/workflows/release-dependent-repositories.yaml@fe8cd964c2e13a408077d9a78b939934e3b4521f # main
     with:
       tag: ${{ needs.get-tag.outputs.tag }}
       dependent_repositories: |

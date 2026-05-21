@@ -9,6 +9,6 @@ on:
 jobs:
   automerge:
     if: ${{ github.event.workflow_run.conclusion == 'success' && github.actor == 'nsmbot'}}
-    uses: networkservicemesh/.github/.github/workflows/automerge.yaml@main
+    uses: networkservicemesh/.github/.github/workflows/automerge.yaml@fe8cd964c2e13a408077d9a78b939934e3b4521f # main
     secrets:
       token: ${{ secrets.NSM_BOT_GITHUB_TOKEN }}
