@@ -39,8 +39,10 @@ func WatchFile(ctx context.Context, filePath string) <-chan []byte {
 	watcher, err := fsnotify.NewWatcher()
 
 	if err != nil {
+		// Do not Close() the watcher here: NewWatcher returns a nil *Watcher along with the
+		// error, so closing it panics with a nil pointer dereference and takes the process
+		// down. There is nothing to release when construction failed.
 		logger.Errorf("can not create node poller: %v", err.Error())
-		_ = watcher.Close()
 		close(result)
 		return result
 	}
