@@ -122,20 +122,22 @@ func refreshUrgently(cancelCtx context.Context, eventFactory begin.EventFactory,
 		// semantics: no extra deadline beyond the chain's own timeouts.
 		// Only the urgent retries are individually bounded, so a wedged
 		// downstream cannot consume the whole remaining token lifetime.
+		// Check for cancellation *before* attempting, never after: a
+		// successful refresh re-enters this element, which cancels this
+		// goroutine's context by design, so a post-attempt check would
+		// misreport every success as "refresh failed: context canceled".
+		if cancelCtx.Err() != nil {
+			return false
+		}
+
 		attemptCtx, attemptCancel := context.Context(cancelCtx), context.CancelFunc(func() {})
 		if !first {
 			attemptCtx, attemptCancel = attemptContext(cancelCtx, clockTime, expireTime)
 		}
 		err := <-eventFactory.Request(begin.CancelContext(attemptCtx))
-		ctxErr := attemptCtx.Err()
 		attemptCancel()
-		// begin returns nil for an event whose context was already done
-		// without having run the chain: that is not a successful refresh.
-		if err == nil && ctxErr == nil {
-			return true
-		}
 		if err == nil {
-			err = ctxErr
+			return true
 		}
 		logger.Warnf("refresh failed: %s", err.Error())
 

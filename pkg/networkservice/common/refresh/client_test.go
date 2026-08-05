@@ -422,9 +422,14 @@ func TestRefreshClient_RefreshOnRefreshFailure(t *testing.T) {
 
 	require.Eventually(t, cloneClient.validator(2), testWait, testTick)
 
-	clockMock.Add(expireTimeout)
-
-	require.Eventually(t, cloneClient.validator(3), testWait, testTick)
+	// The retry after a failed refresh is now urgent (bounded backoff) rather
+	// than one-per-ticker-interval, so advance the mock clock while polling:
+	// the retry timer is registered by the refresh goroutine after the failed
+	// attempt, which may be after a single Add() has already been processed.
+	require.Eventually(t, func() bool {
+		clockMock.Add(2 * time.Second)
+		return cloneClient.validator(3)()
+	}, testWait, testTick)
 }
 
 // TestRefreshClient_UrgentRetryBeforeExpiry replays the production failure
@@ -466,11 +471,15 @@ func TestRefreshClient_UrgentRetryBeforeExpiry(t *testing.T) {
 	// Old behaviour: the next attempt would only fire at the NEXT ticker
 	// interval, another expireTimeout/3 away. New behaviour: an urgent
 	// retry after ~1s of backoff, which also fails...
-	clockMock.Add(2 * time.Second)
-	require.Eventually(t, cloneClient.validator(3), testWait, testTick)
+	require.Eventually(t, func() bool {
+		clockMock.Add(2 * time.Second)
+		return cloneClient.validator(3)()
+	}, testWait, testTick)
 
 	// ...and the following retry (backoff doubled to 2s) succeeds, still
 	// nowhere near the token expiry.
-	clockMock.Add(3 * time.Second)
-	require.Eventually(t, cloneClient.validator(4), testWait, testTick)
+	require.Eventually(t, func() bool {
+		clockMock.Add(3 * time.Second)
+		return cloneClient.validator(4)()
+	}, testWait, testTick)
 }
