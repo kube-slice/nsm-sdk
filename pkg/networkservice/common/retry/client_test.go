@@ -76,6 +76,7 @@ func Test_RetryClient_Request(t *testing.T) {
 				failRequestCount: 5,
 			},
 		),
+		nil,
 		retry.WithInterval(time.Millisecond*10),
 		retry.WithTryTimeout(time.Second/30),
 	)
@@ -105,7 +106,7 @@ func Test_RetryClient_Request_ContextHasCorrectDeadline(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, expectedDeadline, v)
 		}),
-	), retry.WithTryTimeout(time.Hour))
+	), nil, retry.WithTryTimeout(time.Hour))
 
 	var _, err = client.Request(ctx, nil)
 	require.NoError(t, err)
@@ -130,7 +131,7 @@ func Test_RetryClient_Close_ContextHasCorrectDeadline(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, expectedDeadline, v)
 		}),
-	), retry.WithTryTimeout(time.Hour))
+	), nil, retry.WithTryTimeout(time.Hour))
 
 	var _, err = client.Close(ctx, nil)
 	require.NoError(t, err)
@@ -149,6 +150,7 @@ func Test_RetryClient_Close(t *testing.T) {
 				failCloseCount: 5,
 			},
 		),
+		nil,
 		retry.WithInterval(time.Millisecond*10),
 		retry.WithTryTimeout(time.Second/30),
 	)
@@ -157,4 +159,72 @@ func Test_RetryClient_Close(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, counter.Requests())
 	require.Equal(t, 6, counter.Closes())
+}
+
+// Test_RetryClient_RetryBudgetIsPerCall pins down that one call's failures
+// must not poison later calls, and that budget exhaustion no longer cancels
+// the process context. Before the fix the budget was a shared struct field:
+// 20 failures over the whole process lifetime (across every pod the broker
+// serves) permanently poisoned the client and killed the node-wide NSM
+// broker via the injected cancel.
+func Test_RetryClient_RetryBudgetIsPerCall(t *testing.T) {
+	t.Cleanup(func() { goleak.VerifyNone(t) })
+
+	var counter = new(count.Client)
+	var cancelCalled int32
+
+	var client = retry.NewClient(
+		chain.NewNetworkServiceClient(
+			counter,
+			&remoteSideClient{
+				delay:            time.Millisecond,
+				failRequestCount: 1000,
+			},
+		),
+		func() { atomic.AddInt32(&cancelCalled, 1) },
+		retry.WithInterval(time.Millisecond),
+		retry.WithTryTimeout(time.Second/30),
+		retry.WithMaxRetry(4),
+	)
+
+	_, err := client.Request(context.Background(), nil)
+	require.Error(t, err)
+	require.Equal(t, 4, counter.Requests())
+
+	_, err = client.Request(context.Background(), nil)
+	require.Error(t, err)
+	require.Equal(t, 8, counter.Requests())
+
+	require.Zero(t, atomic.LoadInt32(&cancelCalled))
+}
+
+// Test_RetryClient_CloseGivesUpEventually pins down that Close is bounded.
+// An endpoint that is already gone never acknowledges the Close; before the
+// fix the loop retried forever, and a teardown storm kept hammering the
+// whole chain, starving healthy connections' token refreshes.
+func Test_RetryClient_CloseGivesUpEventually(t *testing.T) {
+	t.Cleanup(func() { goleak.VerifyNone(t) })
+
+	var counter = new(count.Client)
+
+	var client = retry.NewClient(
+		chain.NewNetworkServiceClient(
+			counter,
+			&remoteSideClient{
+				delay:          time.Millisecond,
+				failCloseCount: 1000,
+			},
+		),
+		nil,
+		retry.WithInterval(time.Millisecond),
+		retry.WithTryTimeout(time.Second/30),
+		retry.WithCloseMaxRetry(3),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := client.Close(ctx, nil)
+	require.Error(t, err)
+	require.Equal(t, 3, counter.Closes())
 }

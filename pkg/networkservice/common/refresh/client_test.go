@@ -426,3 +426,51 @@ func TestRefreshClient_RefreshOnRefreshFailure(t *testing.T) {
 
 	require.Eventually(t, cloneClient.validator(3), testWait, testTick)
 }
+
+// TestRefreshClient_UrgentRetryBeforeExpiry replays the production failure
+// that motivated the urgent retry: the first refresh attempt fails (a wedged
+// downstream), and with the old ticker-paced retry the next attempt only came
+// a full refresh interval later -- at most two attempts per token lifetime, so
+// two consecutive failures expired a healthy connection. The urgent retry
+// must recover within seconds of backoff instead, long before expiry.
+func TestRefreshClient_UrgentRetryBeforeExpiry(t *testing.T) {
+	t.Cleanup(func() { goleak.VerifyNone(t) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	clockMock := clockmock.New(ctx)
+
+	cloneClient := &countClient{
+		t: t,
+	}
+	client := testClient(ctx, testTokenFunc(clockMock),
+		clockMock,
+		cloneClient,
+		// Fail the first refresh attempt and its first urgent retry
+		// (request indexes 1 and 2); the next attempt succeeds.
+		injecterror.NewClient(injecterror.WithRequestErrorTimes(1, 2)),
+	)
+
+	_, err := client.Request(ctx, &networkservice.NetworkServiceRequest{
+		Connection: &networkservice.Connection{Id: "id"},
+	})
+	require.NoError(t, err)
+	require.Condition(t, cloneClient.validator(1))
+
+	// Advance to the first refresh tick (single-segment path refreshes at
+	// ~1/3 of the token lifetime). That attempt fails.
+	clockMock.Add(expireTimeout / 3)
+	require.Eventually(t, cloneClient.validator(2), testWait, testTick)
+
+	// Old behaviour: the next attempt would only fire at the NEXT ticker
+	// interval, another expireTimeout/3 away. New behaviour: an urgent
+	// retry after ~1s of backoff, which also fails...
+	clockMock.Add(2 * time.Second)
+	require.Eventually(t, cloneClient.validator(3), testWait, testTick)
+
+	// ...and the following retry (backoff doubled to 2s) succeeds, still
+	// nowhere near the token expiry.
+	clockMock.Add(3 * time.Second)
+	require.Eventually(t, cloneClient.validator(4), testWait, testTick)
+}

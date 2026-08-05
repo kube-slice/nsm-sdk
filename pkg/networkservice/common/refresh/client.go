@@ -36,6 +36,20 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/tools/log"
 )
 
+const (
+	// retryBackoffStart..retryBackoffCap bound the urgent retry cadence used
+	// when a refresh attempt fails while the token is still alive. A failed
+	// refresh must not wait a full ticker interval: the ticker fires once per
+	// refresh window, so waiting means at most two attempts per token
+	// lifetime, and two consecutive failures kill a healthy connection.
+	retryBackoffStart = time.Second
+	retryBackoffCap   = 10 * time.Second
+	// attemptTimeoutCap bounds a single refresh attempt: a wedged downstream
+	// (e.g. a Close storm on the nsmgr) must not consume the whole remaining
+	// token lifetime on one hanging call.
+	attemptTimeoutCap = 10 * time.Second
+)
+
 type refreshClient struct {
 	chainCtx context.Context
 }
@@ -56,8 +70,9 @@ func (t *refreshClient) Request(ctx context.Context, request *networkservice.Net
 		return nil, err
 	}
 
-	// Compute refreshAfter
-	refreshAfter := after(ctx, conn)
+	// Compute refreshAfter and the hard expiry of the shortest-lived path
+	// segment. The latter is the deadline the urgent retry loop races.
+	refreshAfter, expireTime := after(ctx, conn)
 
 	// Create a cancel context.
 	cancelCtx, cancel := context.WithCancel(t.chainCtx)
@@ -79,17 +94,79 @@ func (t *refreshClient) Request(ctx context.Context, request *networkservice.Net
 			case <-cancelCtx.Done():
 				return
 			case <-afterTicker.C():
-				if err := <-eventFactory.Request(begin.CancelContext(cancelCtx)); err != nil {
-					logger.Warnf("refresh failed: %s.. will retry", err.Error())
-					afterTicker.Reset(10 * time.Second)
-					continue
+				if refreshUrgently(cancelCtx, eventFactory, clockTime, logger, expireTime) {
+					// The successful Request re-entered this element and
+					// armed a fresh goroutine with the new expiry.
+					return
 				}
-				return
+				// Every attempt failed and the token expired. Keep trying at
+				// the ticker cadence: the path may still recover, and a
+				// successful Request re-arms this element with fresh state.
 			}
 		}
 	}()
 
 	return conn, nil
+}
+
+// refreshUrgently re-requests the connection until a refresh succeeds or the
+// token expires. A refresh failure is not a connection failure: the datapath
+// is still up and only the token is at risk, so retry quickly (bounded
+// backoff), bound each attempt (a hanging downstream must not eat the whole
+// window), and never wait a full ticker interval while the token burns down.
+// Returns true once a refresh succeeded.
+func refreshUrgently(cancelCtx context.Context, eventFactory begin.EventFactory, clockTime clock.Clock, logger log.Logger, expireTime time.Time) bool {
+	backoff := retryBackoffStart
+	for first := true; ; first = false {
+		// The first attempt of a refresh window keeps the historical
+		// semantics: no extra deadline beyond the chain's own timeouts.
+		// Only the urgent retries are individually bounded, so a wedged
+		// downstream cannot consume the whole remaining token lifetime.
+		attemptCtx, attemptCancel := context.Context(cancelCtx), context.CancelFunc(func() {})
+		if !first {
+			attemptCtx, attemptCancel = attemptContext(cancelCtx, clockTime, expireTime)
+		}
+		err := <-eventFactory.Request(begin.CancelContext(attemptCtx))
+		ctxErr := attemptCtx.Err()
+		attemptCancel()
+		// begin returns nil for an event whose context was already done
+		// without having run the chain: that is not a successful refresh.
+		if err == nil && ctxErr == nil {
+			return true
+		}
+		if err == nil {
+			err = ctxErr
+		}
+		logger.Warnf("refresh failed: %s", err.Error())
+
+		if !expireTime.IsZero() && clockTime.Until(expireTime) <= 0 {
+			return false
+		}
+
+		select {
+		case <-cancelCtx.Done():
+			return false
+		case <-clockTime.After(backoff):
+		}
+
+		backoff *= 2
+		if backoff > retryBackoffCap {
+			backoff = retryBackoffCap
+		}
+	}
+}
+
+// attemptContext bounds one refresh attempt to the lesser of attemptTimeoutCap
+// and half the remaining token lifetime, so at least two attempts always fit
+// into whatever lifetime is left.
+func attemptContext(parent context.Context, clockTime clock.Clock, expireTime time.Time) (context.Context, context.CancelFunc) {
+	timeout := attemptTimeoutCap
+	if !expireTime.IsZero() {
+		if remaining := clockTime.Until(expireTime); remaining > 0 && remaining/2 < timeout {
+			timeout = remaining / 2
+		}
+	}
+	return clockTime.WithTimeout(parent, timeout)
 }
 
 func (t *refreshClient) Close(ctx context.Context, conn *networkservice.Connection, opts ...grpc.CallOption) (e *empty.Empty, err error) {
@@ -99,7 +176,7 @@ func (t *refreshClient) Close(ctx context.Context, conn *networkservice.Connecti
 	return next.Client(ctx).Close(ctx, conn, opts...)
 }
 
-func after(ctx context.Context, conn *networkservice.Connection) time.Duration {
+func after(ctx context.Context, conn *networkservice.Connection) (time.Duration, time.Time) {
 	clockTime := clock.FromContext(ctx)
 
 	var minTimeout *time.Duration
@@ -124,7 +201,7 @@ func after(ctx context.Context, conn *networkservice.Connection) time.Duration {
 	}
 
 	if minTimeout == nil || *minTimeout <= 0 {
-		return 1
+		return 1, expireTime
 	}
 
 	// A heuristic to reduce the number of redundant requests in a chain
@@ -138,5 +215,5 @@ func after(ctx context.Context, conn *networkservice.Connection) time.Duration {
 	}
 	duration := time.Duration(float64(*minTimeout) * scale)
 
-	return duration
+	return duration, expireTime
 }

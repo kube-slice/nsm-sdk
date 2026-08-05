@@ -30,11 +30,12 @@ import (
 )
 
 type retryClient struct {
-	interval   time.Duration
-	tryTimeout time.Duration
-	client     networkservice.NetworkServiceClient
-	cancel     context.CancelFunc
-	maxRetry   int
+	interval      time.Duration
+	tryTimeout    time.Duration
+	client        networkservice.NetworkServiceClient
+	cancel        context.CancelFunc
+	maxRetry      int
+	closeMaxRetry int
 }
 
 // Option configuress retry.Client instance.
@@ -54,14 +55,42 @@ func WithInterval(interval time.Duration) Option {
 	}
 }
 
-// NewClient - returns a connect chain element
+// WithMaxRetry sets how many failed attempts a single Request call may make
+// before giving up and returning the error to the caller.
+func WithMaxRetry(maxRetry int) Option {
+	return func(rc *retryClient) {
+		rc.maxRetry = maxRetry
+	}
+}
+
+// WithCloseMaxRetry sets how many failed attempts a single Close call may
+// make before giving up. Close must be bounded: an endpoint that is already
+// gone never acknowledges the Close, and an unbounded retry loop hammers the
+// whole chain for as long as the process lives, starving healthy
+// connections' refreshes (observed as token-expiry cascades under teardown
+// storms).
+func WithCloseMaxRetry(closeMaxRetry int) Option {
+	return func(rc *retryClient) {
+		rc.closeMaxRetry = closeMaxRetry
+	}
+}
+
+// NewClient - returns a connect chain element.
+//
+// The Cancel parameter is retained for API compatibility but is no longer
+// invoked: exhausting the retry budget of one call must fail that call only.
+// Cancelling the process context here took down the NSM client for every pod
+// on the node because of 20 accumulated failures over the whole process
+// lifetime (the budget was shared, mutated without synchronization, and never
+// reset on success).
 func NewClient(client networkservice.NetworkServiceClient, Cancel context.CancelFunc, opts ...Option) networkservice.NetworkServiceClient {
 	var result = &retryClient{
-		interval:   time.Millisecond * 200,
-		tryTimeout: time.Second * 15,
-		cancel:     Cancel,
-		client:     client,
-		maxRetry:   20,
+		interval:      time.Millisecond * 200,
+		tryTimeout:    time.Second * 15,
+		cancel:        Cancel,
+		client:        client,
+		maxRetry:      20,
+		closeMaxRetry: 10,
 	}
 
 	for _, opt := range opts {
@@ -75,16 +104,18 @@ func (r *retryClient) Request(ctx context.Context, request *networkservice.Netwo
 	logger := log.FromContext(ctx).WithField("retryClient", "Request")
 	c := clock.FromContext(ctx)
 
+	// The budget is per call: this call's failures must not poison later
+	// calls (or concurrent ones) for other connections.
+	budget := r.maxRetry
 	for ctx.Err() == nil {
 		requestCtx, cancel := c.WithTimeout(ctx, r.tryTimeout)
 		resp, err := r.client.Request(requestCtx, request.Clone(), opts...)
 		cancel()
 
 		if err != nil {
-			r.maxRetry--
-			if r.maxRetry <= 0 {
-				logger.Infof("Retry request limit exceeded")
-				r.cancel()
+			budget--
+			if budget <= 0 {
+				logger.Errorf("request retry budget (%d) exhausted: %v", r.maxRetry, err.Error())
 				return nil, err
 			}
 			logger.Errorf("try attempt has failed: %v", err.Error())
@@ -107,6 +138,7 @@ func (r *retryClient) Close(ctx context.Context, conn *networkservice.Connection
 	logger := log.FromContext(ctx).WithField("retryClient", "Close")
 	c := clock.FromContext(ctx)
 
+	budget := r.closeMaxRetry
 	for ctx.Err() == nil {
 		closeCtx, cancel := c.WithTimeout(ctx, r.tryTimeout)
 
@@ -114,6 +146,11 @@ func (r *retryClient) Close(ctx context.Context, conn *networkservice.Connection
 		cancel()
 
 		if err != nil {
+			budget--
+			if budget <= 0 {
+				logger.Errorf("close retry budget (%d) exhausted: %v", r.closeMaxRetry, err.Error())
+				return nil, err
+			}
 			logger.Errorf("try attempt has failed: %v", err.Error())
 
 			select {

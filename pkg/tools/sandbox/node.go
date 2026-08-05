@@ -253,5 +253,5 @@ func (n *Node) NewClient(
 	return retry.NewClient(client.NewClient(
 		ctx,
 		opts...,
-	))
+	), nil)
 }
